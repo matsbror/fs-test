@@ -115,6 +115,8 @@ impl FsTestActor {
         let c_size = 50;
         let chunks = req.body.chunks(c_size);
 
+        info!("Number of chunks: {}", chunks.len());
+
         let mut sequence_number = 0;
         for chunk_body in chunks {
             let chunk = Chunk {
@@ -126,8 +128,8 @@ impl FsTestActor {
                 total_bytes: req.body.len() as u64,
             };
 
-            info!("actor call upload_chunk: {:?}", chunk);
-
+            info!("Send file chunk: {} for {}/{}, sixe {}", chunk.sequence_no, chunk.ids.container_id, chunk.ids.object_id, chunk.bytes.len());
+            
             resp = bs_client.upload_chunk(ctx, &chunk).await?;
 
             if !resp.success {
