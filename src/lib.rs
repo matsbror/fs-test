@@ -88,6 +88,12 @@ impl FsTestActor {
             "file.txt".to_string()
         };
 
+        let chunk_size = if query_map.contains_key("chunk_size") {
+            query_map["chunk_size"].parse::<usize>().unwrap()
+        } else {
+            50
+        };
+
         let bs_client = BlobstoreSender::new();
 
         // create the container
@@ -101,7 +107,7 @@ impl FsTestActor {
             });
         }
 
-        let id = ObjectContId {container_id: container_name, object_id: file_name};
+        let id = ObjectMetadata {container_id: container_name, id: file_name, size: req.body.len() as u64};
         resp = bs_client.start_upload(ctx, &id).await?;
 
         if !resp.success {
@@ -112,23 +118,23 @@ impl FsTestActor {
             });
         }
 
-        let c_size = 50;
-        let chunks = req.body.chunks(c_size);
+        let chunks = req.body.chunks(chunk_size);
 
         info!("Number of chunks: {}", chunks.len());
 
         let mut sequence_number = 0;
         for chunk_body in chunks {
             let chunk = Chunk {
-                ids: id.clone(),
+                object_data: id.clone(),
                 bytes: chunk_body.to_vec().clone(),
-                chunk_size: c_size as u64,
-                context: None,
+                chunk_size: chunk_size as u64,
                 sequence_no: sequence_number,
-                total_bytes: req.body.len() as u64,
             };
 
-            info!("Send file chunk: {} for {}/{}, sixe {}", chunk.sequence_no, chunk.ids.container_id, chunk.ids.object_id, chunk.bytes.len());
+            info!("Send file chunk: {} for {}/{}, size {}", chunk.sequence_no, 
+                                                            chunk.object_data.container_id, 
+                                                            chunk.object_data.id, 
+                                                            chunk.bytes.len());
             
             resp = bs_client.upload_chunk(ctx, &chunk).await?;
 
