@@ -1,3 +1,4 @@
+#[allow(unused_imports)]
 use std::{str, borrow::Borrow};
 use wasmbus_rpc::actor::prelude::*;
 use serde_json::json;
@@ -33,18 +34,16 @@ impl HttpServer for FsTestActor {
 }
 
 #[async_trait]
-impl ActorReceive for FsTestActor {
+impl ChunkReceiver for FsTestActor {
 
     /// Receives a file chunk from a blobstore. This must be called AFTER
     /// the StartUpload operation.
     /// It is recommended to keep chunks under 1MB to not exceed wasm memory allocation
-    async fn receive_chunk(&self, ctx: &Context, arg: &Chunk) -> RpcResult<()> {
+    async fn receive_chunk(&self, ctx: &Context, arg: &Chunk) -> RpcResult<ChunkResponse> {
 
         info!("receive_chunk called");
 
-
-
-        Ok(())
+        Ok(ChunkResponse {cancel_download: false})
     }
 
 }
@@ -107,56 +106,56 @@ impl FsTestActor {
             });
         }
 
-        let id = ObjectMetadata {container_id: container_name, id: file_name, size: req.body.len() as u64};
-        resp = bs_client.start_upload(ctx, &id).await?;
+        // let id = ObjectMetadata {container_id: container_name, id: file_name, size: req.body.len() as u64};
+        // resp = bs_client.start_upload(ctx, &id).await?;
 
-        if !resp.success {
-            return Ok(HttpResponse {
-                body: json!({ "error": resp.error }).to_string().into_bytes(),
-                status_code: 400,
-                ..Default::default()
-            });
-        }
+        // if !resp.success {
+        //     return Ok(HttpResponse {
+        //         body: json!({ "error": resp.error }).to_string().into_bytes(),
+        //         status_code: 400,
+        //         ..Default::default()
+        //     });
+        // }
 
-        let chunks = req.body.chunks(chunk_size);
+        // let chunks = req.body.chunks(chunk_size);
 
-        info!("Number of chunks: {}", chunks.len());
+        // info!("Number of chunks: {}", chunks.len());
 
-        let mut sequence_number = 0;
-        for chunk_body in chunks {
-            let chunk = Chunk {
-                object_data: id.clone(),
-                bytes: chunk_body.to_vec().clone(),
-                chunk_size: chunk_size as u64,
-                sequence_no: sequence_number,
-            };
+        // let mut sequence_number = 0;
+        // for chunk_body in chunks {
+        //     let chunk = Chunk {
+        //         object_data: id.clone(),
+        //         bytes: chunk_body.to_vec().clone(),
+        //         chunk_size: chunk_size as u64,
+        //         sequence_no: sequence_number,
+        //     };
 
-            info!("Send file chunk: {} for {}/{}, size {}", chunk.sequence_no, 
-                                                            chunk.object_data.container_id, 
-                                                            chunk.object_data.id, 
-                                                            chunk.bytes.len());
+        //     info!("Send file chunk: {} for {}/{}, size {}", chunk.sequence_no, 
+        //                                                     chunk.object_data.container_id, 
+        //                                                     chunk.object_data.id, 
+        //                                                     chunk.bytes.len());
             
-            resp = bs_client.upload_chunk(ctx, &chunk).await?;
+        //     resp = bs_client.upload_chunk(ctx, &chunk).await?;
 
-            if !resp.success {
-                return Ok(HttpResponse {
-                    body: json!({ "error": resp.error }).to_string().into_bytes(),
-                    status_code: 400,
-                    ..Default::default()
-                });
-            }
+        //     if !resp.success {
+        //         return Ok(HttpResponse {
+        //             body: json!({ "error": resp.error }).to_string().into_bytes(),
+        //             status_code: 400,
+        //             ..Default::default()
+        //         });
+        //     }
 
-            sequence_number += 1;
-        }
+        //     sequence_number += 1;
+        // }
 
 
-        if !resp.success {
-            return Ok(HttpResponse {
-                body: json!({ "error": resp.error }).to_string().into_bytes(),
-                status_code: 400,
-                ..Default::default()
-            });
-        }
+        // if !resp.success {
+        //     return Ok(HttpResponse {
+        //         body: json!({ "error": resp.error }).to_string().into_bytes(),
+        //         status_code: 400,
+        //         ..Default::default()
+        //     });
+        // }
 
         Ok(HttpResponse {
             body: "Success!".to_string().into_bytes(),
