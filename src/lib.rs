@@ -1,3 +1,4 @@
+#[allow(unused_imports)]
 use std::{str, borrow::Borrow};
 use wasmbus_rpc::actor::prelude::*;
 use serde_json::json;
@@ -86,6 +87,12 @@ impl FsTestActor {
             "file.txt".to_string()
         };
 
+        let chunk_size = if query_map.contains_key("chunk_size") {
+            query_map["chunk_size"].parse::<usize>().unwrap()
+        } else {
+            50
+        };
+
         let bs_client = BlobstoreSender::new();
 
         // create the container
@@ -121,16 +128,14 @@ impl FsTestActor {
         //         ids: id.clone(),
         //         bytes: chunk_body.to_vec().clone(),
         //         chunk_size: c_size as u64,
-        //         context: None,
         //         sequence_no: sequence_number,
         //         total_bytes: req.body.len() as u64,
         //     };
 
         //     info!("Send file chunk: {} for {}/{}, sixe {}", chunk.sequence_no, chunk.ids.container_id, chunk.ids.object_id, chunk.bytes.len());
-            
-        //     resp = bs_client.upload_chunk(ctx, &chunk).await?;
-
-        //     if !resp.success {
+        //         object_data: id.clone(),
+        //         bytes: chunk_body.to_vec().clone(),
+        //         chunk_size: chunk_size as u64,
         //         return Ok(HttpResponse {
         //             body: json!({ "error": resp.error }).to_string().into_bytes(),
         //             status_code: 400,
