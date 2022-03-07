@@ -1,5 +1,7 @@
 #[allow(unused_imports)]
 use std::{str, borrow::Borrow};
+use std::collections::HashMap;
+use std::path::{Component, Path};
 use wasmbus_rpc::actor::prelude::*;
 use serde_json::json;
 use wasmcloud_interface_httpserver::{HttpRequest, HttpResponse, HttpServer, HttpServerReceiver};
@@ -8,8 +10,6 @@ use wasmcloud_interface_blobstore::*;
 mod query_string;
 use query_string::parse_query_string;
 
-const DEFAULT_CONTAINER: String = String::from("container");
-const DEFAULT_FILE: String = String::from("file");
 #[derive(Debug, Default, Actor, HealthResponder)]
 #[services(Actor, HttpServer)]
 struct FsTestActor {}
@@ -77,9 +77,28 @@ impl FsTestActor {
 
         let query_map = parse_query_string(&req.query_string);
 
-        let container_name = query_map.get("container").unwrap_or(&DEFAULT_CONTAINER).clone();
+        let path_segments = Path::components(Path::new(&req.path));
+        let last = path_segments.last().unwrap().as_os_str().to_str().unwrap();
 
-        let file_name = query_map.get("name").unwrap_or(&DEFAULT_FILE).clone();
+        match last {
+            "create_container" => create_container(ctx, query_map),
+            "upoload" =>         Self::upload_file(ctx, req, query_map).await
+            _ =>
+                Ok(HttpResponse {
+                    body: "Success!".to_string().into_bytes(),
+                    status_code: 200,
+                    ..Default::default()
+                })
+
+        }
+
+
+
+    }
+
+    async fn upload_file(ctx: &Context, body: &Vec<u8>, query_map: HashMap<&str, String>) -> Result<HttpResponse, RpcError> {
+        let container_name = query_map.get("container").cloned().unwrap_or("container".to_string());
+        let file_name = query_map.get("name").cloned().unwrap_or("file.txt".to_string());
 
         let bs_client = BlobstoreSender::new();
 
@@ -98,7 +117,7 @@ impl FsTestActor {
         let chunk = Chunk {
             container_id: container_name,
             object_id: file_name,
-            bytes: req.body.clone(),
+            bytes: body.clone(),
             offset: 0,
             is_last: true,
         };
