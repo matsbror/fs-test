@@ -8,6 +8,8 @@ use wasmcloud_interface_blobstore::*;
 mod query_string;
 use query_string::parse_query_string;
 
+const DEFAULT_CONTAINER: String = String::from("container");
+const DEFAULT_FILE: String = String::from("file");
 #[derive(Debug, Default, Actor, HealthResponder)]
 #[services(Actor, HttpServer)]
 struct FsTestActor {}
@@ -75,28 +77,14 @@ impl FsTestActor {
 
         let query_map = parse_query_string(&req.query_string);
 
-        let container_name = if query_map.contains_key("container") {
-            query_map["container"].clone()
-        } else {
-            "container".to_string()
-        };
+        let container_name = query_map.get("container").unwrap_or(&DEFAULT_CONTAINER).clone();
 
-        let file_name = if query_map.contains_key("name") {
-            query_map["name"].clone()
-        } else {
-            "file.txt".to_string()
-        };
-
-        let chunk_size = if query_map.contains_key("chunk_size") {
-            query_map["chunk_size"].parse::<usize>().unwrap()
-        } else {
-            50
-        };
+        let file_name = query_map.get("name").unwrap_or(&DEFAULT_FILE).clone();
 
         let bs_client = BlobstoreSender::new();
 
         // create the container
-        let mut resp = bs_client.create_container(ctx, &container_name).await;
+        let resp = bs_client.create_container(ctx, &container_name).await;
 
         if let Err(e) = resp {
             return Ok(HttpResponse {
@@ -106,54 +94,29 @@ impl FsTestActor {
             });
         }
 
-        // let id = ObjectContId {container_id: container_name, object_id: file_name};
-        // resp = bs_client.start_upload(ctx, &id).await?;
+        // Send the body of the request in one chunk
+        let chunk = Chunk {
+            container_id: container_name,
+            object_id: file_name,
+            bytes: req.body.clone(),
+            offset: 0,
+            is_last: true,
+        };
 
-        // if !resp.success {
-        //     return Ok(HttpResponse {
-        //         body: json!({ "error": resp.error }).to_string().into_bytes(),
-        //         status_code: 400,
-        //         ..Default::default()
-        //     });
-        // }
+        let por = PutObjectRequest {
+            chunk,
+            ..Default::default()
+        };
+        let poresp = bs_client.put_object(ctx, &por).await;
 
-        // let c_size = 50;
-        // let chunks = req.body.chunks(c_size);
+        if let Err(e) = poresp {
+            return Ok(HttpResponse {
+                body: json!({ "error": e }).to_string().into_bytes(),
+                status_code: 400,
+                ..Default::default()
+            });
+        }
 
-        // info!("Number of chunks: {}", chunks.len());
-
-        // let mut sequence_number = 0;
-        // for chunk_body in chunks {
-        //     let chunk = Chunk {
-        //         ids: id.clone(),
-        //         bytes: chunk_body.to_vec().clone(),
-        //         chunk_size: c_size as u64,
-        //         sequence_no: sequence_number,
-        //         total_bytes: req.body.len() as u64,
-        //     };
-
-        //     info!("Send file chunk: {} for {}/{}, sixe {}", chunk.sequence_no, chunk.ids.container_id, chunk.ids.object_id, chunk.bytes.len());
-        //         object_data: id.clone(),
-        //         bytes: chunk_body.to_vec().clone(),
-        //         chunk_size: chunk_size as u64,
-        //         return Ok(HttpResponse {
-        //             body: json!({ "error": resp.error }).to_string().into_bytes(),
-        //             status_code: 400,
-        //             ..Default::default()
-        //         });
-        //     }
-
-        //     sequence_number += 1;
-        // }
-
-
-        // if !resp.success {
-        //     return Ok(HttpResponse {
-        //         body: json!({ "error": resp.error }).to_string().into_bytes(),
-        //         status_code: 400,
-        //         ..Default::default()
-        //     });
-        // }
 
         Ok(HttpResponse {
             body: "Success!".to_string().into_bytes(),

@@ -3,7 +3,7 @@ use std::collections::HashMap;
 
 /// Utility for parsing query strings
 /// argument qs is a string of form key1=val1?key2=val2
-pub fn parse_query_string(qs: &str) -> HashMap<String, String> {
+pub fn parse_query_string(qs: &str) -> HashMap<&str, String> {
     let mut map = HashMap::new();
 
     if qs.len() > 0 {
@@ -18,7 +18,7 @@ pub fn parse_query_string(qs: &str) -> HashMap<String, String> {
 
             let key = kv[0];
             let val = kv[1];
-            map.insert(key.to_string(), val.to_string());
+            map.insert(key, val.to_string());
         }
     }
 
