@@ -20,16 +20,34 @@ The actor implements the following functionality:
 
 # Usage when running
 
-Assuming the httpserver provider that the actor is linked to runs on some.node:4000 
+Assuming the httpserver provider that the actor is linked to runs on `localhost:8080` 
 the following examples show how to use the web interface.
 
 ## Container exists
 
-Looking for container/directory/bucket `cont1`
+Looking for container/directory/bucket `cont1`:
 
-`curl -X GET 'http://some.node:4000/container_exists?container=cont1'`
+`curl -X GET 'http://some.node:8080/container_exists?container=cont1'`
+
+If the container does not exist, the reply will be:
+
+`{"container_exists":false,"success":true}`
+
+The `success` field only denotes that the call itself was successful.
+
+If it exists, the reply is:
+
+`{"container_exists":true,"success":true}`
 
 ## Create container
+
+The following will create a container with name `cont1`:
+
+`curl -X POST 'http://localhost:8080/create_container?container=cont1'`
+
+A successful creation will return a http response code 200 and:
+
+`{"success":true}`
 
 ## Get container information
 
@@ -47,10 +65,11 @@ Looking for container/directory/bucket `cont1`
 
 ## Upload an object
 
+
+
 ## Download an object
 
-returns "Hello Alice".
-
+# Building
 
 - To compile the actor and generate a signed Webassembly module, type `make`.
 - To load and start the actor you'll need to have a running OCI-compatible
@@ -66,24 +85,6 @@ provider with the contract id `wasmcloud:httpserver`. You can start the
 provider (TODO: need registry url and more specific instructions here)
 
 It must also be linked to a blobstore provider. At the time of this writing
-there are twi
-
-Your actor can be invoked from a terminal command-line or from a web browser.
-The following examples assume the http server is listening on localhost port 8000.
-
-### In a terminal
-
-```
-curl localhost:8000
-
-curl "localhost:8000/?name=Alice"
-```
-(note the quotes in the second example)
+there are two providers: one for unix file system and one for s3. 
 
 
-### In a browser
-
-visit the url "http://localhost:8000" or "http://localhost:8000/?name=Alice"
-
-
-# fs-test

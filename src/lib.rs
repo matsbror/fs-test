@@ -55,15 +55,21 @@ impl ChunkReceiver for FsTestActor {
 
 impl FsTestActor {
 
-    async fn handle_get(&self, _ctx: &Context, op: &str, query_map: &HashMap<&str, String>) -> RpcResult<HttpResponse> {
-
+    async fn handle_get(&self, ctx: &Context, op: &str, query_map: &HashMap<&str, String>) -> RpcResult<HttpResponse> {
         info!("GET request. op: {}, query: {:?}", op, query_map);
 
-        Ok(HttpResponse {
-            body: "Success!".to_string().into_bytes(),
-            status_code: 200,
-            ..Default::default()
-        })
+        match op {
+            "container_exists" => {
+                let container_name = query_map.get("container").cloned().unwrap_or("container".to_string());
+                container_exists(ctx, &container_name).await
+            }
+            _ =>
+                Ok(HttpResponse {
+                    body: json!({ "success": false, "error": format!("operator {:?} not implemented", op) }).to_string().into_bytes(),
+                    status_code: 400,
+                    ..Default::default()
+                })
+        }
     }
 
     async fn handle_post(&self, ctx: &Context, op: &str, body: &Vec<u8>, query_map: &HashMap<&str, String>) -> RpcResult<HttpResponse> {
@@ -71,15 +77,17 @@ impl FsTestActor {
         info!("POST request. op: {}, query: {:?}", op, query_map);
 
         match op {
-            "create_container" =>   create_container(ctx, query_map).await,
+            "create_container" =>   {
+                let container_name = query_map.get("container").cloned().unwrap_or("container".to_string());
+                create_container(ctx, &container_name).await
+            },
             "upload" =>             upload_file(ctx, body, query_map).await,
             _ =>
                 Ok(HttpResponse {
-                    body: "Success!".to_string().into_bytes(),
-                    status_code: 200,
+                    body: json!({ "success": false, "error": format!("operator {:?} not implemented", op) }).to_string().into_bytes(),
+                    status_code: 400,
                     ..Default::default()
                 })
-
         }
     }
 
@@ -94,15 +102,48 @@ impl FsTestActor {
             ..Default::default()
         })
     }
-    
+
 }
 
-async fn create_container(_ctx: &Context, _query_map: &HashMap<&str, String>) -> Result<HttpResponse, RpcError> {
-    Ok(HttpResponse {
-        body: json!({ "error": "create container not implemented yet"}).to_string().into_bytes(),
-        status_code: 400,
-        ..Default::default()
-    })
+async fn container_exists(ctx: &Context, container_name: &String) -> Result<HttpResponse, RpcError> {
+
+    let bs_client = BlobstoreSender::new();
+
+    match bs_client.container_exists(ctx, container_name).await {
+        Ok(exists) => Ok(HttpResponse {
+            body: json!({ "success": true, "container_exists" : exists}).to_string().into_bytes(),
+            status_code: 200,
+            ..Default::default()
+        }),
+        Err(e) => {
+            return Ok(HttpResponse {
+                body: json!({ "success": false, "error": e }).to_string().into_bytes(),
+                status_code: 400,
+                ..Default::default()
+            });
+        }
+    }
+}
+
+
+async fn create_container(ctx: &Context, container_name: &String) -> Result<HttpResponse, RpcError> {
+
+    let bs_client = BlobstoreSender::new();
+
+    match bs_client.create_container(ctx, container_name).await {
+        Ok(()) => Ok(HttpResponse {
+            body: json!({ "success": true}).to_string().into_bytes(),
+            status_code: 200,
+            ..Default::default()
+        }),
+        Err(e) => {
+            return Ok(HttpResponse {
+                body: json!({ "success": false, "error": e }).to_string().into_bytes(),
+                status_code: 400,
+                ..Default::default()
+            });
+        }
+    }
 }
 
 async fn upload_file(ctx: &Context, body: &Vec<u8>, query_map: &HashMap<&str, String>) -> Result<HttpResponse, RpcError> {
