@@ -1,27 +1,56 @@
 # fs-test Actor
 
-This project implements an actor that returns a greeting.
+This project implements an actor that can be used to test a blobstore provider's 
+functionality. It is a simple web service which acts as a facade to the blobstore 
+interface.
 
-Upon receiving an http request, the actor returns "Hello World".
-The response can be customized by adding an http query parameter 'name'.
-For example, if the http server is running on localhost port 8000,
-the command
+The actor implements the following functionality:
 
-```
-curl "localhost:8000/?name=Alice"
-```
+- Container exists
+- Create container (directory/bucket)
+- Get Container Info
+- List containers
+- Remove containers
+- Object exists
+- Get object information
+- List objects
+- Remove objects
+- Upload an object (file/blob)
+- Download an object
+
+# Usage when running
+
+Assuming the httpserver provider that the actor is linked to runs on some.node:4000 
+the following examples show how to use the web interface.
+
+## Container exists
+
+Looking for container/directory/bucket `cont1`
+
+`curl -X GET 'http://some.node:4000/container_exists?container=cont1'`
+
+## Create container
+
+## Get container information
+
+## List containers
+
+## Remove containers
+
+## Object exists
+
+## Get object information
+
+## List objects
+
+## Remove objects
+
+## Upload an object
+
+## Download an object
 
 returns "Hello Alice".
 
-## The implementation
-
-To respond to http requests, the actor must implement the
-`httpResponse` method of the
-[HttpServer interface](https://github.com/wasmCloud/interfaces/tree/main/httpserver) interface.
-
-The implementation is in the file [src/lib.rs](./src/lib.rs)
-
-## See it in action
 
 - To compile the actor and generate a signed Webassembly module, type `make`.
 - To load and start the actor you'll need to have a running OCI-compatible
@@ -35,6 +64,9 @@ select `build/fs_test_s.wasm`.
 The actor must be linked with an HttpServer capability 
 provider with the contract id `wasmcloud:httpserver`. You can start the
 provider (TODO: need registry url and more specific instructions here)
+
+It must also be linked to a blobstore provider. At the time of this writing
+there are twi
 
 Your actor can be invoked from a terminal command-line or from a web browser.
 The following examples assume the http server is listening on localhost port 8000.
