@@ -27,7 +27,7 @@ the following examples show how to use the web interface.
 
 Looking for container/directory/bucket `cont1`:
 
-`curl -X GET 'http://some.node:8080/container_exists?container=cont1'`
+`curl -X GET 'http://localhost:8080/container_exists?container=cont1'`
 
 If the container does not exist, the reply will be:
 

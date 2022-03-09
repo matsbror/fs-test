@@ -1,14 +1,15 @@
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 
 /// Utility for parsing query strings
 /// argument qs is a string of form key1=val1?key2=val2
-pub fn parse_query_string(qs: &str) -> HashMap<&str, String> {
-    let mut map = HashMap::new();
+pub fn parse_query_string(qs: &str) -> BTreeMap<&str, String> {
+    let mut map = BTreeMap::new();
 
     if qs.len() > 0 {
-        let key_value_pairs = qs.split('?');
+        let key_value_pairs = qs.split('&');
 
+        let mut equal_counter = 0;
         for kv_pair in key_value_pairs {
             let kv: Vec<&str> = kv_pair.split('=').collect();
 
@@ -16,8 +17,13 @@ pub fn parse_query_string(qs: &str) -> HashMap<&str, String> {
                 continue;
             }
 
-            let key = kv[0];
+            let mut key = kv[0];
             let val = kv[1];
+
+            if map.contains_key(key) {
+                key = format!("{}_{}", key, equal_counter).as_str() ;
+                equal_counter += 1;
+            }
             map.insert(key, val.to_string());
         }
     }
@@ -53,7 +59,7 @@ mod tests {
     #[test]
     fn no_equal_sign_mixed() {
         
-        let q1 = "hello?name=file";
+        let q1 = "hello&name=file";
 
         let result = parse_query_string(q1);
 
@@ -75,7 +81,7 @@ mod tests {
     #[test]
     fn two_queries() {
         
-        let q1 = "name=file.txt?container=here_be_files";
+        let q1 = "name=file.txt&container=here_be_files";
 
         let result = parse_query_string(q1);
 
@@ -86,7 +92,7 @@ mod tests {
     #[test]
     fn three_queries() {
         
-        let q1 = "name=file.txt?container=here_be_files?options=read_only";
+        let q1 = "name=file.txt&container=here_be_files&options=read_only";
 
         let result = parse_query_string(q1);
 

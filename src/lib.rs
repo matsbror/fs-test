@@ -1,6 +1,6 @@
 #[allow(unused_imports)]
 use std::{str, borrow::Borrow};
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 #[allow(unused_imports)]
 use std::path::{Component, Path};
 use wasmbus_rpc::actor::prelude::*;
@@ -55,24 +55,40 @@ impl ChunkReceiver for FsTestActor {
 
 impl FsTestActor {
 
-    async fn handle_get(&self, ctx: &Context, op: &str, query_map: &HashMap<&str, String>) -> RpcResult<HttpResponse> {
+    async fn handle_get(&self, ctx: &Context, op: &str, query_map: &BTreeMap<&str, String>) -> RpcResult<HttpResponse> {
         info!("GET request. op: {}, query: {:?}", op, query_map);
 
         match op {
             "container_exists" => {
                 let container_name = query_map.get("container").cloned().unwrap_or("container".to_string());
                 container_exists(ctx, &container_name).await
-            }
+            },
+            "get_object_info" => {
+                let container_name = query_map.get("container").cloned().unwrap_or("container".to_string());
+                let file_name = query_map.get("name").cloned().unwrap_or("file.txt".to_string());
+                get_object_info(ctx, &container_name, &file_name).await
+            },
+            "get_container_info" => {
+                let container_name = query_map.get("container").cloned().unwrap_or("container".to_string());
+                get_container_info(ctx, &container_name).await
+            },
+            "list_containers" => {
+                list_containers(ctx).await
+            },
+            "list_objects" => {
+                let container_name = query_map.get("container").cloned().unwrap_or("container".to_string());
+                list_objects(ctx, &container_name).await
+            },
             _ =>
                 Ok(HttpResponse {
-                    body: json!({ "success": false, "error": format!("operator {:?} not implemented", op) }).to_string().into_bytes(),
+                    body: json!({ "success": false, "error": format!("GET operator {:?} not implemented", op) }).to_string().into_bytes(),
                     status_code: 400,
                     ..Default::default()
                 })
         }
     }
 
-    async fn handle_post(&self, ctx: &Context, op: &str, body: &Vec<u8>, query_map: &HashMap<&str, String>) -> RpcResult<HttpResponse> {
+    async fn handle_post(&self, ctx: &Context, op: &str, body: &Vec<u8>, query_map: &BTreeMap<&str, String>) -> RpcResult<HttpResponse> {
 
         info!("POST request. op: {}, query: {:?}", op, query_map);
 
@@ -81,10 +97,15 @@ impl FsTestActor {
                 let container_name = query_map.get("container").cloned().unwrap_or("container".to_string());
                 create_container(ctx, &container_name).await
             },
-            "upload" =>             upload_file(ctx, body, query_map).await,
+            "upload" => {
+                let container_name = query_map.get("container").cloned().unwrap_or("container".to_string());
+                let file_name = query_map.get("name").cloned().unwrap_or("file.txt".to_string());
+
+                upload_file(ctx, body, &container_name, &file_name).await
+            },
             _ =>
                 Ok(HttpResponse {
-                    body: json!({ "success": false, "error": format!("operator {:?} not implemented", op) }).to_string().into_bytes(),
+                    body: json!({ "success": false, "error": format!("POST operator {:?} not implemented", op) }).to_string().into_bytes(),
                     status_code: 400,
                     ..Default::default()
                 })
@@ -92,15 +113,22 @@ impl FsTestActor {
     }
 
 
-    async fn handle_put(&self, _ctx: &Context, op: &str, _body: &Vec<u8>, query_map: &HashMap<&str, String>) -> RpcResult<HttpResponse> {
+    async fn handle_put(&self, _ctx: &Context, op: &str, _body: &Vec<u8>, query_map: &BTreeMap<&str, String>) -> RpcResult<HttpResponse> {
 
         info!("PUT request. op: {}, query: {:?}", op, query_map);
 
-        Ok(HttpResponse {
-            body: "Success!".to_string().into_bytes(),
-            status_code: 200,
-            ..Default::default()
-        })
+        match op {
+            "remove_containers" =>   {
+                let container_ids = query_map.range("container").map(|k,v| v).collect();
+                remove_containers(ctx, &container_ids).await
+            },
+            _ =>
+                Ok(HttpResponse {
+                    body: json!({ "success": false, "error": format!("PUT operator {:?} not implemented", op) }).to_string().into_bytes(),
+                    status_code: 400,
+                    ..Default::default()
+                })
+        }
     }
 
 }
@@ -146,27 +174,14 @@ async fn create_container(ctx: &Context, container_name: &String) -> Result<Http
     }
 }
 
-async fn upload_file(ctx: &Context, body: &Vec<u8>, query_map: &HashMap<&str, String>) -> Result<HttpResponse, RpcError> {
-    let container_name = query_map.get("container").cloned().unwrap_or("container".to_string());
-    let file_name = query_map.get("name").cloned().unwrap_or("file.txt".to_string());
+async fn upload_file(ctx: &Context, body: &Vec<u8>, container_name: &String, file_name: &String) -> Result<HttpResponse, RpcError> {
 
     let bs_client = BlobstoreSender::new();
 
-    // create the container
-    let resp = bs_client.create_container(ctx, &container_name).await;
-
-    if let Err(e) = resp {
-        return Ok(HttpResponse {
-            body: json!({ "error": e }).to_string().into_bytes(),
-            status_code: 400,
-            ..Default::default()
-        });
-    }
-
     // Send the body of the request in one chunk
     let chunk = Chunk {
-        container_id: container_name,
-        object_id: file_name,
+        container_id: container_name.clone(),
+        object_id: file_name.clone(),
         bytes: body.clone(),
         offset: 0,
         is_last: true,
@@ -176,20 +191,139 @@ async fn upload_file(ctx: &Context, body: &Vec<u8>, query_map: &HashMap<&str, St
         chunk,
         ..Default::default()
     };
+
     let poresp = bs_client.put_object(ctx, &por).await;
 
-    if let Err(e) = poresp {
-        return Ok(HttpResponse {
+    match poresp {
+        Ok(resp) => Ok(HttpResponse {
+            body: json!({ "success": true, "response": resp }).to_string().into_bytes(),
+            status_code: 400,
+            ..Default::default()
+        }),
+        Err(e) => Ok(HttpResponse {
             body: json!({ "error": e }).to_string().into_bytes(),
             status_code: 400,
             ..Default::default()
-        });
+        }),
     }
-
-
-    Ok(HttpResponse {
-        body: "Success!".to_string().into_bytes(),
-        status_code: 200,
-        ..Default::default()
-    })
 }
+
+async fn get_object_info(ctx: &Context,  container_name: &String, file_name: &String) -> Result<HttpResponse, RpcError> {
+    let bs_client = BlobstoreSender::new();
+
+    let o = ContainerObject {
+        container_id: container_name.clone(),
+        object_id: file_name.clone(),
+    };
+    let resp = bs_client.get_object_info(ctx, &o).await;
+
+    match resp {
+        Ok(meta) =>
+            Ok(HttpResponse {
+                body: json!(meta).to_string().into_bytes(),
+                status_code: 200,
+                ..Default::default()
+            }),
+        Err(e) =>
+            Ok(HttpResponse {
+                body: json!({ "error": e }).to_string().into_bytes(),
+                status_code: 400,
+                ..Default::default()
+            }),
+    }
+}
+
+async fn get_container_info(ctx: &Context,  container_name: &String) -> Result<HttpResponse, RpcError> {
+    let bs_client = BlobstoreSender::new();
+
+    let resp = bs_client.get_container_info(ctx, container_name).await;
+
+    match resp {
+        Ok(meta) =>
+            Ok(HttpResponse {
+                body: json!(meta).to_string().into_bytes(),
+                status_code: 200,
+                ..Default::default()
+            }),
+        Err(e) =>
+            Ok(HttpResponse {
+                body: json!({ "error": e }).to_string().into_bytes(),
+                status_code: 400,
+                ..Default::default()
+            }),
+    }
+}
+
+async fn list_containers(ctx: &Context) -> Result<HttpResponse, RpcError> {
+    let bs_client = BlobstoreSender::new();
+
+    let resp = bs_client.list_containers(ctx).await;
+
+    match resp {
+        Ok(meta) =>
+            Ok(HttpResponse {
+                body: json!(meta).to_string().into_bytes(),
+                status_code: 200,
+                ..Default::default()
+            }),
+        Err(e) =>
+            Ok(HttpResponse {
+                body: json!({ "error": e }).to_string().into_bytes(),
+                status_code: 400,
+                ..Default::default()
+            }),
+    }
+}
+
+async fn list_objects(ctx: &Context,  container_name: &String) -> Result<HttpResponse, RpcError> {
+    let bs_client = BlobstoreSender::new();
+
+    let lo_request = ListObjectsRequest {
+        container_id: container_name.clone(),
+        start_with: None,
+        continuation: None,
+        end_with: None,
+        end_before: None,
+        max_items: None
+    };
+    let resp = bs_client.list_objects(ctx, &lo_request).await;
+
+    match resp {
+        Ok(meta) =>
+            Ok(HttpResponse {
+                body: json!(meta).to_string().into_bytes(),
+                status_code: 200,
+                ..Default::default()
+            }),
+        Err(e) =>
+            Ok(HttpResponse {
+                body: json!({ "error": e }).to_string().into_bytes(),
+                status_code: 400,
+                ..Default::default()
+            }),
+    }
+}
+
+
+async fn remove_containers(ctx: &Context,  containers: &ContainerIds) -> Result<HttpResponse, RpcError> {
+    let bs_client = BlobstoreSender::new();
+
+    let resp = bs_client.remove_containers(ctx, containers).await;
+
+    match resp {
+        Ok(meta) =>
+            Ok(HttpResponse {
+                body: json!(meta).to_string().into_bytes(),
+                status_code: 200,
+                ..Default::default()
+            }),
+        Err(e) =>
+            Ok(HttpResponse {
+                body: json!({ "error": e }).to_string().into_bytes(),
+                status_code: 400,
+                ..Default::default()
+            }),
+    }
+}
+
+
