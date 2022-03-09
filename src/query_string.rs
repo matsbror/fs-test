@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 
 /// Utility for parsing query strings
 /// argument qs is a string of form key1=val1?key2=val2
-pub fn parse_query_string(qs: &str) -> BTreeMap<&str, String> {
+pub fn parse_query_string(qs: &str) -> BTreeMap<String, String> {
     let mut map = BTreeMap::new();
 
     if qs.len() > 0 {
@@ -17,14 +17,14 @@ pub fn parse_query_string(qs: &str) -> BTreeMap<&str, String> {
                 continue;
             }
 
-            let mut key = kv[0];
-            let val = kv[1];
+            let mut key = kv[0].to_string();
+            let val = kv[1].to_string();
 
-            if map.contains_key(key) {
-                key = format!("{}_{}", key, equal_counter).as_str() ;
+            if map.contains_key(&key) {
+                key.push_str(format!("{}", equal_counter).as_str());
                 equal_counter += 1;
             }
-            map.insert(key, val.to_string());
+            map.insert(key, val);
         }
     }
 

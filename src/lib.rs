@@ -55,7 +55,7 @@ impl ChunkReceiver for FsTestActor {
 
 impl FsTestActor {
 
-    async fn handle_get(&self, ctx: &Context, op: &str, query_map: &BTreeMap<&str, String>) -> RpcResult<HttpResponse> {
+    async fn handle_get(&self, ctx: &Context, op: &str, query_map: &BTreeMap<String, String>) -> RpcResult<HttpResponse> {
         info!("GET request. op: {}, query: {:?}", op, query_map);
 
         match op {
@@ -88,7 +88,7 @@ impl FsTestActor {
         }
     }
 
-    async fn handle_post(&self, ctx: &Context, op: &str, body: &Vec<u8>, query_map: &BTreeMap<&str, String>) -> RpcResult<HttpResponse> {
+    async fn handle_post(&self, ctx: &Context, op: &str, body: &Vec<u8>, query_map: &BTreeMap<String, String>) -> RpcResult<HttpResponse> {
 
         info!("POST request. op: {}, query: {:?}", op, query_map);
 
@@ -113,13 +113,13 @@ impl FsTestActor {
     }
 
 
-    async fn handle_put(&self, _ctx: &Context, op: &str, _body: &Vec<u8>, query_map: &BTreeMap<&str, String>) -> RpcResult<HttpResponse> {
+    async fn handle_put(&self, ctx: &Context, op: &str, _body: &Vec<u8>, query_map: &BTreeMap<String, String>) -> RpcResult<HttpResponse> {
 
         info!("PUT request. op: {}, query: {:?}", op, query_map);
 
         match op {
             "remove_containers" =>   {
-                let container_ids = query_map.range("container").map(|k,v| v).collect();
+                let container_ids = query_map.range("container".to_string()..).map(|(_k, v)| v).cloned().collect();
                 remove_containers(ctx, &container_ids).await
             },
             _ =>
