@@ -28,7 +28,7 @@ impl HttpServer for FsTestActor {
         match req.method.as_ref() {
             "GET" => self.handle_get(ctx, op, &query_map).await,
             "POST" => self.handle_post(ctx, op, &req.body, &query_map).await,
-            "PUT" => self.handle_put(ctx, op, &req.body, &query_map).await ,
+            "DELETE" => self.handle_delete(ctx, op, &req.body, &query_map).await ,
             _ =>  Ok(HttpResponse {
                         body: json!({ "error": "cannot handle method" }).to_string().into_bytes(),
                         status_code: 400,
@@ -63,6 +63,11 @@ impl FsTestActor {
                 let container_name = query_map.get("container").cloned().unwrap_or("container".to_string());
                 container_exists(ctx, &container_name).await
             },
+            "object_exists" => {
+                let container_name = query_map.get("container").cloned().unwrap_or("container".to_string());
+                let file_name = query_map.get("name").cloned().unwrap_or("file.txt".to_string());
+                object_exists(ctx, &container_name, &file_name).await
+            },
             "get_object_info" => {
                 let container_name = query_map.get("container").cloned().unwrap_or("container".to_string());
                 let file_name = query_map.get("name").cloned().unwrap_or("file.txt".to_string());
@@ -75,9 +80,10 @@ impl FsTestActor {
             "list_containers" => {
                 list_containers(ctx).await
             },
-            "list_objects" => {
+            "download" => {
                 let container_name = query_map.get("container").cloned().unwrap_or("container".to_string());
-                list_objects(ctx, &container_name).await
+                let file_name = query_map.get("name").cloned().unwrap_or("file.txt".to_string());
+                download(ctx, &container_name).await
             },
             _ =>
                 Ok(HttpResponse {
@@ -113,7 +119,7 @@ impl FsTestActor {
     }
 
 
-    async fn handle_put(&self, ctx: &Context, op: &str, _body: &Vec<u8>, query_map: &BTreeMap<String, String>) -> RpcResult<HttpResponse> {
+    async fn handle_delete(&self, ctx: &Context, op: &str, _body: &Vec<u8>, query_map: &BTreeMap<String, String>) -> RpcResult<HttpResponse> {
 
         info!("PUT request. op: {}, query: {:?}", op, query_map);
 
@@ -121,6 +127,11 @@ impl FsTestActor {
             "remove_containers" =>   {
                 let container_ids = query_map.range("container".to_string()..).map(|(_k, v)| v).cloned().collect();
                 remove_containers(ctx, &container_ids).await
+            },
+            "remove_objects" =>   {
+                let container_name = query_map.get("container").cloned().unwrap_or("container".to_string());
+                let object_ids = query_map.range("name".to_string()..).map(|(_k, v)| v).cloned().collect();
+                remove_objects(ctx, &container_name, &object_ids).await
             },
             _ =>
                 Ok(HttpResponse {
@@ -178,6 +189,14 @@ async fn upload_file(ctx: &Context, body: &Vec<u8>, container_name: &String, fil
 
     let bs_client = BlobstoreSender::new();
 
+    if !bs_client.container_exists(ctx, container_name).await? {
+        return Ok(HttpResponse {
+            body: json!({ "success": false, "response": "container does not exist" }).to_string().into_bytes(),
+            status_code: 200,
+            ..Default::default()
+        });
+    }
+
     // Send the body of the request in one chunk
     let chunk = Chunk {
         container_id: container_name.clone(),
@@ -197,7 +216,7 @@ async fn upload_file(ctx: &Context, body: &Vec<u8>, container_name: &String, fil
     match poresp {
         Ok(resp) => Ok(HttpResponse {
             body: json!({ "success": true, "response": resp }).to_string().into_bytes(),
-            status_code: 400,
+            status_code: 200,
             ..Default::default()
         }),
         Err(e) => Ok(HttpResponse {
@@ -221,6 +240,31 @@ async fn get_object_info(ctx: &Context,  container_name: &String, file_name: &St
         Ok(meta) =>
             Ok(HttpResponse {
                 body: json!(meta).to_string().into_bytes(),
+                status_code: 200,
+                ..Default::default()
+            }),
+        Err(e) =>
+            Ok(HttpResponse {
+                body: json!({ "error": e }).to_string().into_bytes(),
+                status_code: 400,
+                ..Default::default()
+            }),
+    }
+}
+
+async fn object_exists(ctx: &Context,  container_name: &String, file_name: &String) -> Result<HttpResponse, RpcError> {
+    let bs_client = BlobstoreSender::new();
+
+    let o = ContainerObject {
+        container_id: container_name.clone(),
+        object_id: file_name.clone(),
+    };
+    let resp = bs_client.object_exists(ctx, &o).await;
+
+    match resp {
+        Ok(meta) =>
+            Ok(HttpResponse {
+                body: json!({ "success": true, "object_exists": meta }).to_string().into_bytes(),
                 status_code: 200,
                 ..Default::default()
             }),
@@ -326,4 +370,52 @@ async fn remove_containers(ctx: &Context,  containers: &ContainerIds) -> Result<
     }
 }
 
+async fn remove_objects(ctx: &Context,  container: &ContainerId, object_names: &Vec<ObjectId>) -> Result<HttpResponse, RpcError> {
+    let bs_client = BlobstoreSender::new();
 
+    let objects = RemoveObjectsRequest {
+        container_id: container.clone(),
+        objects: object_names.clone(),
+    };
+    let resp = bs_client.remove_objects(ctx, &objects).await;
+
+    match resp {
+        Ok(meta) =>
+            Ok(HttpResponse {
+                body: json!(meta).to_string().into_bytes(),
+                status_code: 200,
+                ..Default::default()
+            }),
+        Err(e) =>
+            Ok(HttpResponse {
+                body: json!({ "error": e }).to_string().into_bytes(),
+                status_code: 400,
+                ..Default::default()
+            }),
+    }
+}
+
+async fn download(ctx: &Context,  container_name: &String, file_name: &String) -> Result<HttpResponse, RpcError> {
+    let bs_client = BlobstoreSender::new();
+
+    let o = ContainerObject {
+        container_id: container_name.clone(),
+        object_id: file_name.clone(),
+    };
+    let resp = bs_client.object_exists(ctx, &o).await;
+
+    match resp {
+        Ok(meta) =>
+            Ok(HttpResponse {
+                body: json!({ "success": true, "object_exists": meta }).to_string().into_bytes(),
+                status_code: 200,
+                ..Default::default()
+            }),
+        Err(e) =>
+            Ok(HttpResponse {
+                body: json!({ "error": e }).to_string().into_bytes(),
+                status_code: 400,
+                ..Default::default()
+            }),
+    }
+}
