@@ -1,6 +1,6 @@
 #[allow(unused_imports)]
 use std::{str, borrow::Borrow};
-use std::collections::BTreeMap;
+use std::collections::{HashMap, BTreeMap};
 #[allow(unused_imports)]
 use std::path::{Component, Path};
 use wasmbus_rpc::actor::prelude::*;
@@ -80,10 +80,14 @@ impl FsTestActor {
             "list_containers" => {
                 list_containers(ctx).await
             },
+            "list_objects" => {
+                let container_name = query_map.get("container").cloned().unwrap_or("container".to_string());
+                list_objects(ctx, &container_name).await
+            },
             "download" => {
                 let container_name = query_map.get("container").cloned().unwrap_or("container".to_string());
                 let file_name = query_map.get("name").cloned().unwrap_or("file.txt".to_string());
-                download(ctx, &container_name).await
+                download(ctx, &container_name, &file_name).await
             },
             _ =>
                 Ok(HttpResponse {
@@ -398,18 +402,23 @@ async fn remove_objects(ctx: &Context,  container: &ContainerId, object_names: &
 async fn download(ctx: &Context,  container_name: &String, file_name: &String) -> Result<HttpResponse, RpcError> {
     let bs_client = BlobstoreSender::new();
 
-    let o = ContainerObject {
+    let gor = GetObjectRequest {
         container_id: container_name.clone(),
         object_id: file_name.clone(),
+        range_start: None,
+        range_end: None
     };
-    let resp = bs_client.object_exists(ctx, &o).await;
+
+    info!("Send get_object request: {:?}", gor);
+
+    let resp = bs_client.get_object(ctx, &gor).await;
 
     match resp {
         Ok(meta) =>
             Ok(HttpResponse {
-                body: json!({ "success": true, "object_exists": meta }).to_string().into_bytes(),
+                body: meta.initial_chunk.unwrap().bytes,
                 status_code: 200,
-                ..Default::default()
+                header: HashMap::from([("content-type".to_string(), vec!["application/octet".to_string()])]),
             }),
         Err(e) =>
             Ok(HttpResponse {
