@@ -405,8 +405,9 @@ async fn download(ctx: &Context,  container_name: &String, file_name: &String) -
     let gor = GetObjectRequest {
         container_id: container_name.clone(),
         object_id: file_name.clone(),
-        range_start: None,
-        range_end: None
+        range_start: Some(0),
+        range_end: None,
+        async_reply: false,
     };
 
     info!("Send get_object request: {:?}", gor);
@@ -418,7 +419,7 @@ async fn download(ctx: &Context,  container_name: &String, file_name: &String) -
             Ok(HttpResponse {
                 body: meta.initial_chunk.unwrap().bytes,
                 status_code: 200,
-                header: HashMap::from([("content-type".to_string(), vec!["application/octet".to_string()])]),
+                header: HashMap::from([("Content-Type".to_string(), vec!["application/octet-stream".to_string()])]),
             }),
         Err(e) =>
             Ok(HttpResponse {
