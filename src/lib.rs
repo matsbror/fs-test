@@ -89,6 +89,11 @@ impl FsTestActor {
                 let file_name = query_map.get("name").cloned().unwrap_or("file.txt".to_string());
                 download(ctx, &container_name, &file_name).await
             },
+            "async_dl" => {
+                let container_name = query_map.get("container").cloned().unwrap_or("container".to_string());
+                let file_name = query_map.get("name").cloned().unwrap_or("file.txt".to_string());
+                async_download(ctx, &container_name, &file_name).await
+            },
             _ =>
                 Ok(HttpResponse {
                     body: json!({ "success": false, "error": format!("GET operator {:?} not implemented", op) }).to_string().into_bytes(),
@@ -408,6 +413,39 @@ async fn download(ctx: &Context,  container_name: &String, file_name: &String) -
         range_start: Some(0),
         range_end: None,
         async_reply: false,
+    };
+
+    info!("Send get_object request: {:?}", gor);
+
+    let resp = bs_client.get_object(ctx, &gor).await;
+
+    match resp {
+        Ok(meta) =>
+            Ok(HttpResponse {
+                body: meta.initial_chunk.unwrap().bytes,
+                status_code: 200,
+                header: HashMap::from([("Content-Type".to_string(), vec!["application/octet-stream".to_string()])]),
+            }),
+        Err(e) =>
+            Ok(HttpResponse {
+                body: json!({ "error": e }).to_string().into_bytes(),
+                status_code: 400,
+                ..Default::default()
+            }),
+    }
+}
+
+/// This function will request a download to be made asynchronously
+/// The method receive_chunk will be called when the downloaded file is sent back.
+async fn async_download(ctx: &Context,  container_name: &String, file_name: &String) -> Result<HttpResponse, RpcError> {
+    let bs_client = BlobstoreSender::new();
+
+    let gor = GetObjectRequest {
+        container_id: container_name.clone(),
+        object_id: file_name.clone(),
+        range_start: None,
+        range_end: None,
+        async_reply: true,
     };
 
     info!("Send get_object request: {:?}", gor);

@@ -193,7 +193,11 @@ If succesful it will reply:
 
 ## Download an object
 
+To download a file, named `file.bin` in container `cont1` do:
 
+```
+curl -X GET 'http://localhost:8080/download?container=cont1&name=file.bin' > file.bin
+```
 
 # Building
 
@@ -207,10 +211,10 @@ When prompted for the path,
 select `build/fs_test_s.wasm`.
 
 The actor must be linked with an HttpServer capability 
-provider with the contract id `wasmcloud:httpserver`. You can start the
-provider (TODO: need registry url and more specific instructions here)
+provider with the contract id `wasmcloud:httpserver`. 
 
-It must also be linked to a blobstore provider. At the time of this writing
-there are two providers: one for unix file system and one for s3. 
+It must also be linked to a blobstore provider with contract id `wasmcloud:blobstore`. 
+At the time of this writing there are two providers: one for unix file system and one for s3. 
+
 
 
