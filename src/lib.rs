@@ -44,11 +44,13 @@ impl ChunkReceiver for FsTestActor {
     /// Receives a file chunk from a blobstore. This must be called AFTER
     /// the StartUpload operation.
     /// It is recommended to keep chunks under 1MB to not exceed wasm memory allocation
-    async fn receive_chunk(&self, _ctx: &Context, _arg: &Chunk) -> RpcResult<ChunkResponse> {
+    async fn receive_chunk(&self, _ctx: &Context, chunk: &Chunk) -> RpcResult<ChunkResponse> {
 
-        info!("receive_chunk called");
+        info!("receive_chunk called: container = {:?}, object = {:?}", chunk.container_id, chunk.object_id);
 
-        Err(RpcError::NotImplemented)
+        info!("Length: {:?}", chunk.bytes.len());
+
+        Ok(ChunkResponse::default())
     }
 
 }
