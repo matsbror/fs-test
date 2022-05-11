@@ -12,7 +12,7 @@ mod query_string;
 use query_string::parse_query_string;
 
 #[derive(Debug, Default, Actor, HealthResponder)]
-#[services(Actor, HttpServer)]
+#[services(Actor, HttpServer, ChunkReceiver)]
 struct FsTestActor {}
 
 /// Implementation of HttpServer trait methods
@@ -94,7 +94,9 @@ impl FsTestActor {
             "async_dl" => {
                 let container_name = query_map.get("container").cloned().unwrap_or("container".to_string());
                 let file_name = query_map.get("name").cloned().unwrap_or("file.txt".to_string());
-                async_download(ctx, &container_name, &file_name).await
+                let r = async_download(ctx, &container_name, &file_name).await;
+                info!("************** after async download");
+                r
             },
             _ =>
                 Ok(HttpResponse {
@@ -119,6 +121,19 @@ impl FsTestActor {
                 let file_name = query_map.get("name").cloned().unwrap_or("file.txt".to_string());
 
                 upload_file(ctx, body, &container_name, &file_name).await
+            },
+            "sink" => {
+
+                let _ = echo_file(ctx, body).await;
+
+                Ok(HttpResponse {
+                    body: json!({ "success": true }).to_string().into_bytes(),
+                    status_code: 200,
+                    ..Default::default()
+                })
+            },
+            "echo" => {
+                echo_file(ctx, body).await
             },
             _ =>
                 Ok(HttpResponse {
@@ -238,6 +253,19 @@ async fn upload_file(ctx: &Context, body: &Vec<u8>, container_name: &String, fil
     }
 }
 
+
+async fn echo_file(_ctx: &Context, body: &Vec<u8>) -> Result<HttpResponse, RpcError> {
+
+    Ok(HttpResponse {
+        body: body.clone(),
+        status_code: 200,
+        ..Default::default()
+    })
+
+}
+
+
+
 async fn get_object_info(ctx: &Context,  container_name: &String, file_name: &String) -> Result<HttpResponse, RpcError> {
     let bs_client = BlobstoreSender::new();
 
@@ -262,6 +290,8 @@ async fn get_object_info(ctx: &Context,  container_name: &String, file_name: &St
             }),
     }
 }
+
+
 
 async fn object_exists(ctx: &Context,  container_name: &String, file_name: &String) -> Result<HttpResponse, RpcError> {
     let bs_client = BlobstoreSender::new();
@@ -455,13 +485,13 @@ async fn async_download(ctx: &Context,  container_name: &String, file_name: &Str
     let resp = bs_client.get_object(ctx, &gor).await;
 
     match resp {
-        Ok(meta) =>
+        Ok(meta) => 
             Ok(HttpResponse {
                 body: meta.initial_chunk.unwrap().bytes,
                 status_code: 200,
                 header: HashMap::from([("Content-Type".to_string(), vec!["application/octet-stream".to_string()])]),
             }),
-        Err(e) =>
+        Err(e) => 
             Ok(HttpResponse {
                 body: json!({ "error": e }).to_string().into_bytes(),
                 status_code: 400,
