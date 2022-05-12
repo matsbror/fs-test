@@ -485,11 +485,10 @@ async fn async_download(ctx: &Context,  container_name: &String, file_name: &Str
     let resp = bs_client.get_object(ctx, &gor).await;
 
     match resp {
-        Ok(meta) => 
+        Ok(_) => 
             Ok(HttpResponse {
-                body: meta.initial_chunk.unwrap().bytes,
                 status_code: 200,
-                header: HashMap::from([("Content-Type".to_string(), vec!["application/octet-stream".to_string()])]),
+                ..Default::default()
             }),
         Err(e) => 
             Ok(HttpResponse {
